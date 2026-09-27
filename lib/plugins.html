@@ -1,0 +1,731 @@
+<!doctype html>
+<!-- claudify plugins: packed into app.asar as .vite/build/claudify-plugins.html and loaded by
+     the loader into a sandboxed window whose only bridge is window.claudify.call -->
+<html><head><meta charset="utf-8"><title>claudify plugins</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src file: data:">
+<style>
+/* Claude's fonts from app.asar. The font stacks fall back if an update renames the files. */
+@font-face { font-family:"Anthropic Serif"; font-style:normal; font-weight:300 800; src:url("../renderer/main_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2") format("woff2"); }
+@font-face { font-family:"Anthropic Serif"; font-style:italic; font-weight:300 800; src:url("../renderer/main_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2") format("woff2"); }
+@font-face { font-family:"Anthropic Sans"; font-style:normal; font-weight:300 800; src:url("../renderer/main_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2") format("woff2"); }
+@font-face { font-family:"Anthropic Sans"; font-style:italic; font-weight:300 800; src:url("../renderer/main_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2") format("woff2"); }
+
+:root {
+  --bg:#000; --surface-1:#0d0d0d; --surface-3:#151515; --border:#262626;
+  --dim:#a6a6a6; --muted:#c8c8c8; --text:#fff;
+  /* paintLook repaints these from the Claudify Theme settings, or uses Claude's brand color when the theme is off */
+  --accent:#d97757; --accent-rgb:217 119 87; --on-accent:#000;
+  --bad:#f85149; --bad-rgb:248 81 73;
+  --plate:rgb(255 255 255 / .07); --plate-strong:rgb(255 255 255 / .12);
+  /* outline of inputs and swatches: follows the text color so it shows on any background */
+  --ctl-line:color-mix(in srgb, var(--text) 28%, transparent);
+  --btn-r:8px; --r-sm:6px; --r-md:10px; --r-lg:14px;
+  --ease:cubic-bezier(.2,.7,.3,1); --fb:160ms; --press:90ms;
+  --elev-2:0 2px 6px rgb(0 0 0 / .55), 0 18px 48px rgb(0 0 0 / .45);
+  --serif:"Anthropic Serif", "Noto Serif", Georgia, serif;
+  --ui:"Anthropic Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono:ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", monospace;
+}
+* { box-sizing:border-box; }
+html, body { height:100%; }
+body { margin:0; display:grid; grid-template-columns:216px 1fr; background:var(--bg); color:var(--text); font:500 13px/1.5 var(--ui); -webkit-font-smoothing:antialiased; overflow:hidden; }
+button { font:inherit; color:inherit; cursor:pointer; border:0; background:none; padding:0; }
+input, select, textarea { font:inherit; color:inherit; }
+::-webkit-scrollbar { width:10px; } ::-webkit-scrollbar-thumb { background:#2a2a2a; border-radius:10px; border:3px solid transparent; background-clip:padding-box; }
+::placeholder { color:var(--dim); font-style:italic; opacity:1; }
+
+/* controls */
+.btn { display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 13px; border-radius:var(--btn-r); background:var(--plate); color:var(--muted); white-space:nowrap; transition:background var(--fb), color var(--fb); }
+.btn:hover { background:var(--plate-strong); color:var(--text); }
+.btn.primary { background:var(--text); color:var(--bg); } .btn.primary:hover { background:color-mix(in srgb, var(--text) 88%, var(--bg)); color:var(--bg); }
+.btn.tint { background:rgb(var(--accent-rgb) / .16); color:var(--text); } .btn.tint:hover { background:rgb(var(--accent-rgb) / .24); }
+.btn.sm { height:28px; padding:0 10px; }
+.ibtn { display:inline-grid; place-items:center; width:28px; height:28px; border-radius:var(--btn-r); background:var(--plate); color:var(--muted); flex:none; transition:background var(--fb), color var(--fb); }
+.ibtn.lg { width:34px; height:34px; }
+.ibtn.ghost { background:none; } .ibtn:hover { background:var(--plate-strong); color:var(--text); }
+.ibtn[data-armed] { background:rgb(var(--bad-rgb) / .16); color:var(--bad); box-shadow:inset 0 0 0 1px rgb(var(--bad-rgb) / .5); }
+:is(.btn, .ibtn, .nav-item, .tab, .seg button):active { scale:.985; transition:scale var(--press); }
+
+/* rail */
+nav { display:flex; flex-direction:column; padding:22px 14px 16px; gap:3px; }
+.brand { font:400 21px/1 var(--serif); letter-spacing:0; padding:2px 10px 26px; color:var(--text); }
+.brand i { color:var(--dim); }
+.nav-list { position:relative; display:flex; flex-direction:column; gap:3px; }
+.nav-item { position:relative; display:flex; align-items:center; gap:10px; height:34px; padding:0 10px; border-radius:var(--btn-r); color:var(--dim); text-align:left; width:100%; transition:background var(--fb), color var(--fb); }
+.nav-item:hover { background:var(--plate); color:var(--text); }
+.nav-item.active { background:var(--plate); color:var(--text); }
+.nav-item .count { margin-left:auto; font:11.5px var(--mono); font-variant-numeric:tabular-nums; color:var(--dim); }
+.selbar { position:absolute; left:0; width:2px; height:18px; border-radius:2px; background:var(--accent); pointer-events:none; transition:top 320ms var(--ease), opacity var(--fb); }
+.rail-foot { margin-top:auto; display:flex; flex-direction:column; gap:10px; }
+.hint { color:var(--dim); font-size:12px; font-style:italic; padding:0 10px; white-space:nowrap; }
+kbd { font:500 11px var(--mono); font-style:normal; background:var(--plate); border-radius:var(--r-sm); padding:1px 5px; color:var(--muted); }
+
+/* main + the dotted ground */
+main { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; }
+#dots { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.top, .content { position:relative; }
+.top { display:flex; align-items:center; gap:8px; padding:22px 30px 18px; min-height:78px; }
+.top h1 { font:400 23px/1.1 var(--serif); margin:0; }
+.top h1 i { color:var(--accent); }
+.sp { flex:1; }
+.content { flex:1; overflow:auto; scrollbar-gutter:stable; padding:4px 30px 30px; }
+
+/* cards */
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:14px; }
+.card { position:relative; overflow:hidden; background:var(--surface-1); border:1px solid var(--border); border-radius:var(--r-lg); padding:16px 16px 14px; display:flex; flex-direction:column; gap:10px; cursor:pointer; min-height:150px; transition:background var(--fb), border-color var(--fb), translate 240ms var(--ease), opacity var(--fb); }
+.card:hover { background:var(--surface-3); border-color:color-mix(in srgb, var(--border), var(--text) 14%); translate:0 -2px; }
+.card.off { opacity:.5; } .card.off:hover { opacity:.75; }
+.edge::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--edge); }
+.edge.pending { --edge:var(--accent); } .edge.error { --edge:var(--bad); }
+.card-head { display:flex; align-items:center; gap:12px; }
+.glyph { width:34px; height:34px; border-radius:var(--btn-r); display:grid; place-items:center; flex:none; background:var(--plate); color:var(--muted); }
+.card-title { font:400 16px/1.25 var(--serif); }
+.card-file { color:var(--dim); font:11.5px var(--mono); }
+.card-desc { color:var(--muted); font:400 14px/1.5 var(--serif); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.card-desc.none { color:var(--dim); font-style:italic; }
+.meta-row { margin-top:auto; display:flex; align-items:center; gap:14px; color:var(--dim); font:11.5px var(--mono); font-variant-numeric:tabular-nums; }
+.meta-row span { display:inline-flex; align-items:center; gap:5px; }
+.meta-row .mark { color:var(--accent); } .meta-row .mark.bad { color:var(--bad); }
+
+/* switch */
+.switch { position:relative; width:30px; height:16px; border-radius:16px; background:var(--plate-strong); flex:none; transition:background 200ms var(--ease); }
+.switch:hover { background:color-mix(in srgb, var(--text) 18%, transparent); }
+.switch::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--text); transition:translate 200ms var(--ease), background 200ms; }
+.switch.on { background:var(--accent); } .switch.on::after { translate:14px 0; background:var(--on-accent); }
+
+/* detail */
+.detail { max-width:880px; }
+.hero { display:flex; align-items:center; gap:14px; margin:0 0 14px; }
+.hero .glyph { width:44px; height:44px; }
+.hero h2 { margin:0; font:400 24px/1.2 var(--serif); }
+.hero .meta { color:var(--dim); font:11.5px var(--mono); margin-top:3px; }
+.hero .actions { margin-left:auto; display:flex; gap:10px; align-items:center; }
+.desc { color:var(--muted); font:400 15px/1.6 var(--serif); margin:0 0 20px; max-width:62ch; }
+.notice { position:relative; overflow:hidden; display:flex; gap:12px; align-items:center; background:var(--surface-1); border:1px solid var(--border); border-radius:var(--r-lg); padding:12px 14px 12px 17px; margin-bottom:14px; color:var(--muted); }
+.notice .glyphmark { color:var(--edge); display:grid; }
+.notice b { color:var(--text); font-weight:500; }
+.notice .why { color:var(--dim); font-size:12.5px; }
+.tabs { position:relative; display:flex; align-items:center; gap:4px; margin-bottom:16px; }
+.tab { position:relative; height:28px; padding:0 12px; border-radius:var(--btn-r); color:var(--dim); transition:background var(--fb), color var(--fb); }
+.tab:hover { background:var(--plate); color:var(--text); }
+.tab.active { background:var(--plate); color:var(--text); }
+.tabbar { position:absolute; bottom:-6px; height:2px; border-radius:2px; background:var(--accent); pointer-events:none; transition:left 320ms var(--ease), width 320ms var(--ease); }
+.panel { background:var(--surface-1); border:1px solid var(--border); border-radius:var(--r-lg); padding:8px; }
+.row { display:grid; grid-template-columns:1fr minmax(220px, 320px); gap:20px; align-items:center; min-height:48px; padding:6px 10px; }
+.row .label { color:var(--muted); }
+.ctl { display:flex; align-items:center; gap:10px; justify-content:flex-end; }
+input[type=range] { -webkit-appearance:none; appearance:none; flex:1; height:4px; border-radius:4px; outline:none; cursor:pointer;
+  background:linear-gradient(var(--accent), var(--accent)) 0 / var(--p, 0%) 100% no-repeat, var(--plate-strong); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--text); transition:scale var(--fb); }
+input[type=range]:hover::-webkit-slider-thumb { scale:1.15; }
+.val { min-width:62px; text-align:right; font:12px var(--mono); font-variant-numeric:tabular-nums; color:var(--dim); }
+.field { background:var(--bg); border:1px solid var(--ctl-line); border-radius:var(--btn-r); height:30px; padding:0 10px; outline:none; width:100%; transition:border-color var(--fb); }
+.field:focus { border-color:var(--accent); }
+.group { display:flex; align-items:center; gap:12px; justify-content:space-between; min-height:30px; padding:18px 10px 4px; font:italic 15px var(--serif); color:var(--text); }
+.group .ctl { flex:none; }
+/* rows that depend on another setting fold away instead of vanishing */
+.fold { display:grid; grid-template-rows:1fr; transition:grid-template-rows 420ms var(--ease), opacity 420ms var(--ease); }
+.fold > div { min-height:0; overflow:hidden; }
+.fold.shut { grid-template-rows:0fr; opacity:0; }
+.row.sub { min-height:0; padding-top:0; padding-bottom:10px; }
+.row.sub .label { display:flex; align-items:center; gap:12px; padding-left:14px; color:var(--dim); }
+.stage { width:44px; height:44px; flex:none; border-radius:var(--btn-r); background:var(--bg) center / 100% no-repeat; box-shadow:inset 0 0 0 1px var(--border); transition:background-size 120ms var(--ease); }
+.picker { display:flex; align-items:center; gap:16px; margin:0 10px 12px 24px; padding:12px; border-radius:var(--r-md); background:var(--plate); }
+.picker canvas { width:88px; height:88px; flex:none; object-fit:contain; border-radius:var(--btn-r); background:var(--bg); box-shadow:inset 0 0 0 1px var(--border); image-rendering:pixelated; }
+.picker .pick-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; }
+.picker .pick-line { display:flex; align-items:center; gap:10px; }
+.group:first-child { padding-top:8px; }
+.thumb { width:30px; height:30px; border-radius:var(--btn-r); background:var(--bg) center / contain no-repeat; box-shadow:inset 0 0 0 1px var(--border); display:grid; place-items:center; flex:none; color:var(--dim); font:10px var(--mono); text-transform:uppercase; }
+.fname.none { font:italic 13px var(--serif); }
+.fname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:12px var(--mono); color:var(--dim); text-align:right; }
+.swatch { position:relative; width:30px; height:30px; border-radius:var(--btn-r); box-shadow:inset 0 0 0 1px var(--ctl-line); overflow:hidden; flex:none; cursor:pointer; }
+.swatch input { position:absolute; inset:-8px; width:46px; height:46px; border:0; padding:0; cursor:pointer; opacity:0; }
+.hex { width:96px; font:12px var(--mono); }
+.seg { display:flex; background:var(--plate); border-radius:var(--btn-r); padding:2px; gap:2px; flex-wrap:wrap; justify-content:flex-end; }
+.seg button { height:26px; padding:0 10px; border-radius:var(--r-sm); color:var(--dim); transition:background var(--fb), color var(--fb); }
+.seg button:hover { color:var(--text); }
+.seg button.on { background:var(--plate-strong); color:var(--text); }
+select.field { cursor:pointer; }
+.empty { text-align:center; color:var(--dim); padding:64px 24px; font:italic 400 15px/1.6 var(--serif); }
+.empty h3 { color:var(--text); margin:12px 0 4px; font:400 19px var(--serif); font-style:normal; }
+.empty .glyphmark { color:var(--dim); display:inline-grid; }
+.empty pre { text-align:left; display:inline-block; background:var(--bg); border:1px solid var(--border); border-radius:var(--r-md); padding:12px 14px; font:12px/1.7 var(--mono); font-style:normal; color:var(--muted); margin-top:14px; }
+.editor-bar { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+.foot { color:var(--dim); font-size:12px; font-style:italic; }
+textarea.code { width:100%; min-height:420px; height:calc(100vh - 350px); resize:vertical; background:var(--bg); border:1px solid var(--border); border-radius:var(--r-md); padding:14px 16px; font:12.5px/1.65 var(--mono); color:#dcdcdc; outline:none; tab-size:2; white-space:pre; direction:ltr; transition:border-color var(--fb); }
+textarea.code:focus { border-color:rgb(var(--accent-rgb) / .6); }
+.log { white-space:pre-wrap; font:12px/1.7 var(--mono); color:var(--muted); padding:10px 12px; margin:0; word-break:break-all; }
+.toast { position:fixed; right:22px; bottom:22px; background:var(--surface-1); border:1px solid var(--border); border-radius:var(--r-md); padding:10px 14px; box-shadow:var(--elev-2); translate:0 5px; opacity:0; transition:opacity 340ms var(--ease), translate 340ms var(--ease); pointer-events:none; }
+.toast.show { translate:0 0; opacity:1; } .toast.bad { color:var(--bad); }
+
+/* entrance animation, staggered */
+@keyframes rise { from { opacity:0; translate:0 5px; } }
+.enter { animation:rise 420ms var(--ease) both; animation-delay:min(calc(var(--i, 0) * 70ms), 700ms); }
+
+/* icon hover animations */
+.ic { transition:rotate 700ms var(--ease), translate 300ms var(--ease), scale 300ms var(--ease); }
+@keyframes ic-shake { 25% { rotate:-10deg; } 50% { rotate:9deg; } 75% { rotate:-4deg; } }
+@keyframes ic-hop { 30% { translate:0 -3px; } 60% { translate:0 0; } 80% { translate:0 -2px; } }
+@keyframes ic-code { 30% { translate:-2px 0; } 70% { translate:2px 0; } }
+@keyframes ic-pop { 50% { scale:1.2; } }
+@media (prefers-reduced-motion:no-preference) {
+  :is(button, label):hover .ic-refresh { rotate:360deg; }
+  :is(button, label):hover .ic-reset { rotate:-360deg; }
+  :is(button, label):hover .ic-back { translate:-2px 0; }
+  :is(button, label):hover .ic-download { animation:ic-hop 600ms var(--ease); }
+  :is(button, label, .card):hover .ic-brush { animation:ic-shake 700ms var(--ease); }
+  :is(button, label, .card):hover .ic-code { animation:ic-code 500ms var(--ease); }
+  :is(button, label):hover .ic-trash { animation:ic-shake 500ms var(--ease); }
+  :is(button, label):hover .ic-check { animation:ic-pop 400ms var(--ease); }
+  :is(button, label):hover .ic-grid { rotate:90deg; }
+  :is(button, label):hover .ic-activity { animation:ic-code 600ms var(--ease); }
+}
+@media (prefers-reduced-motion:reduce) { .enter { animation:none; } * { transition:none !important; } }
+</style></head>
+<body>
+<nav>
+  <div class="brand">claud<i>ify</i></div>
+  <div class="nav-list" id="navItems"></div>
+  <div class="rail-foot">
+    <button class="nav-item" id="reload"></button>
+    <div class="hint">Open anytime <kbd>Ctrl Alt K</kbd></div>
+  </div>
+</nav>
+<main><canvas id="dots"></canvas><div class="top" id="top"></div><div class="content" id="content"></div></main>
+<div class="toast" id="toast"></div>
+<script>
+const api = window.claudify.call;
+const h = (t, a = {}, ...kids) => {
+  const e = document.createElement(t);
+  for (const [k, v] of Object.entries(a)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "class") e.className = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k === "value") e.value = v;
+    else if (k in e && typeof v !== "string") e[k] = v;
+    else e.setAttribute(k, v);
+  }
+  e.append(...kids.flat().filter((k) => k != null && k !== false && k !== ""));
+  return e;
+};
+const I = {
+  puzzle: '<path d="M9 3.5a2 2 0 0 1 4 0V5h3a1 1 0 0 1 1 1v3h1.5a2 2 0 0 1 0 4H17v3a1 1 0 0 1-1 1h-3v-1.5a2 2 0 0 0-4 0V17H6a1 1 0 0 1-1-1v-3h1.5a2 2 0 0 0 0-4H5V6a1 1 0 0 1 1-1h3z"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+  activity: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
+  brush: '<path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L12 14.8 9.2 12z"/><path d="M9 12.5c-2.5-.3-4.5 1.6-4.5 4 0 1.8-1.2 2.8-2.5 3.5 4.5 1.5 9-.5 9-4.6"/>',
+  code: '<path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/><path d="m14 4-4 16"/>',
+  back: '<path d="m15 18-6-6 6-6"/>', refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
+  reset: '<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/>',
+  check: '<path d="m5 12 5 5L20 7"/>', trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>', layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>', film: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  download: '<path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M5 20h14"/>', sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+};
+const svg = (name, s = 18) => `<svg class="ic ic-${name}" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I[name]}</svg>`;
+const ico = (name, s) => h("span", { style: "display:grid", html: svg(name, s) });
+
+let S = { plugins: [], log: "" };
+let view = { page: "installed" }; // installed | activity | detail{kind,file,tab,isNew}
+let dirty = false, quietUntil = 0, entering = true;
+
+// the Claudify Theme's colors, font and corners, applied to this window too
+const FONTS = { system: 'ui-sans-serif, system-ui, sans-serif', inter: '"Inter", "Inter Variable", ui-sans-serif, sans-serif',
+  mono: '"JetBrains Mono", ui-monospace, monospace', custom: '"Claudify Custom", ui-sans-serif, system-ui, sans-serif' };
+const LOOK = ["--bg", "--surface-1", "--surface-3", "--border", "--text", "--muted", "--dim", "--plate", "--plate-strong",
+  "--btn-r", "--r-sm", "--r-md", "--r-lg", "--ui", "--dot-rgb"];
+let fontFace = null;
+const rgbOf = (c) => {
+  const probe = h("i", { style: `color:${c};display:none` }); document.body.append(probe);
+  const m = getComputedStyle(probe).color.match(/\d+(\.\d+)?/g); probe.remove();
+  return m && m.slice(0, 3).map(Number);
+};
+const lumOf = (rgb) => { const c = rgb.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+const readable = (fg, bgRgb, light, min = 4.5) => {
+  const rgb = rgbOf(fg);
+  if (!rgb) return fg;
+  const lb = lumOf(bgRgb), ratio = (c) => { const l = lumOf(c); return (Math.max(l, lb) + 0.05) / (Math.min(l, lb) + 0.05); };
+  for (let i = 0, c = rgb; i < 50; i++) {
+    if (ratio(c) >= min) return `rgb(${c.map(Math.round).join(" ")})`;
+    c = c.map((v) => (light ? v * 0.95 : v + (255 - v) * 0.05));
+  }
+  return light ? "#000" : "#fff";
+};
+// the theme's Default and OLED color choices, so this window matches them
+const PRESETS = {
+  default: { background: "#151515", lift: 4, textcolor: "#f0efec", outline: "#2b2b2a", accent: "#d97757" },
+  oled: { background: "#000000", lift: 3, textcolor: "#f0efec", outline: "#262626", accent: "#d97757" },
+};
+const paintLook = async () => {
+  const t = await api("theme").catch(() => null), root = document.documentElement.style;
+  if (t && t.colors !== "custom") Object.assign(t, PRESETS[t.colors] || PRESETS.default);
+  for (const k of LOOK) root.removeProperty(k);
+  if (fontFace) { document.fonts.delete(fontFace); fontFace = null; }
+  let accent = rgbOf(t ? t.accent : await api("accent").catch(() => "#d97757"));
+  if (t && accent) { // the accent draws switches and sliders, so it has to show on the background too
+    const bg = rgbOf(t.background) || [0, 0, 0];
+    accent = rgbOf(readable(t.accent, bg, (Math.max(...bg) + Math.min(...bg)) / 510 > 0.6, 3)) || accent;
+  }
+  if (accent) {
+    const [r, g, b] = accent;
+    root.setProperty("--accent", `rgb(${r} ${g} ${b})`);
+    root.setProperty("--accent-rgb", `${r} ${g} ${b}`);
+    root.setProperty("--on-accent", 0.2126 * r + 0.7152 * g + 0.0722 * b > 150 ? "#000" : "#fff");
+  }
+  if (!t) return dots();
+  // surfaces shade darker on a light background, and text that would not read on the background
+  // is moved darker or lighter here, so this window stays usable whatever colors Claude gets
+  const bgRgb = rgbOf(t.background) || [0, 0, 0];
+  const light = (Math.max(...bgRgb) + Math.min(...bgRgb)) / 510 > 0.6;
+  const text = readable(t.textcolor, bgRgb, light);
+  const set = (k, v) => root.setProperty(k, v), lift = (Number(t.lift) || 0) * (light ? -1 : 1);
+  set("--bg", t.background);
+  set("--surface-1", `hsl(from ${t.background} h s calc(l + ${lift * 0.8}))`);
+  set("--surface-3", `hsl(from ${t.background} h s calc(l + ${lift * 1.6}))`);
+  set("--border", t.outline);
+  set("--text", text);
+  set("--muted", `color-mix(in srgb, ${text} 80%, ${t.background})`);
+  set("--dim", `color-mix(in srgb, ${text} 62%, ${t.background})`);
+  set("--plate", `color-mix(in srgb, ${text} 7%, transparent)`);
+  set("--plate-strong", `color-mix(in srgb, ${text} 12%, transparent)`);
+  const d = rgbOf(text); if (d) set("--dot-rgb", d.join(" "));
+  const r = Number(t.radius);
+  if (Number.isFinite(r)) [["--btn-r", 1], ["--r-sm", .75], ["--r-md", 1.25], ["--r-lg", 1.75]].forEach(([k, f]) => root.setProperty(k, `${r * f}px`));
+  if (t.font === "custom" && t.customfont) {
+    fontFace = new FontFace("Claudify Custom", `url("${t.customfont}")`);
+    document.fonts.add(fontFace); fontFace.load().catch(() => {});
+  }
+  if (FONTS[t.font] && (t.font !== "custom" || t.customfont)) root.setProperty("--ui", FONTS[t.font]);
+  dots();
+};
+
+// dotted background that bulges toward the pointer
+const dots = (() => {
+  const cv = document.getElementById("dots"), ctx = cv.getContext("2d"), main = cv.parentElement;
+  const GAP = 22, STRENGTH = 22, RADIUS = 260;
+  let px = -1e4, py = -1e4, queued = false;
+  const draw = () => {
+    queued = false;
+    const dpr = devicePixelRatio || 1, w = main.clientWidth, hh = main.clientHeight;
+    if (cv.width !== w * dpr || cv.height !== hh * dpr) { cv.width = w * dpr; cv.height = hh * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, hh);
+    const dotRgb = getComputedStyle(document.documentElement).getPropertyValue("--dot-rgb").trim() || "255 255 255";
+    for (let y = GAP / 2; y < hh; y += GAP) for (let x = GAP / 2; x < w; x += GAP) {
+      const dx = x - px, dy = y - py, d = Math.hypot(dx, dy);
+      let ox = 0, oy = 0, a = 0.11;
+      if (d < RADIUS && d > 0) { const f = (1 - d / RADIUS) ** 2; ox = (dx / d) * f * STRENGTH; oy = (dy / d) * f * STRENGTH; a += f * 0.14; }
+      ctx.fillStyle = `rgb(${dotRgb} / ${a})`; ctx.beginPath(); ctx.arc(x + ox, y + oy, 1, 0, 7); ctx.fill();
+    }
+  };
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(draw); } };
+  main.addEventListener("pointermove", (e) => { const r = main.getBoundingClientRect(); px = e.clientX - r.left; py = e.clientY - r.top; queue(); });
+  main.addEventListener("pointerleave", () => { px = py = -1e4; queue(); });
+  new ResizeObserver(queue).observe(main);
+  return queue;
+})();
+
+const toast = (msg, bad) => {
+  const t = document.getElementById("toast"); t.textContent = msg; t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.className = "toast" + (bad ? " bad" : ""), 2600);
+};
+const run = async (fn, ok) => { try { const r = await fn(); if (ok) toast(ok); await refresh(); return r; } catch (e) { toast(String(e.message || e).replace(/^Error invoking remote method 'claudify': (Error: )?/, ""), true); } };
+const guard = () => !dirty || confirm("Discard unsaved changes?");
+const go = (v) => { if (!guard()) return; dirty = false; view = v; entering = true; render(); };
+
+async function refresh() { S = await api("state"); render(); }
+
+// slides a selection marker to the active element (instant on first placement)
+const slide = (bar, el, horizontal) => {
+  if (!el) { bar.style.opacity = "0"; return; }
+  const first = !bar.dataset.placed; bar.dataset.placed = "1";
+  if (first) bar.style.transition = "none";
+  bar.style.opacity = "1";
+  if (horizontal) { bar.style.left = el.offsetLeft + 12 + "px"; bar.style.width = el.offsetWidth - 24 + "px"; }
+  else bar.style.top = el.offsetTop + (el.offsetHeight - 18) / 2 + "px";
+  if (first) requestAnimationFrame(() => requestAnimationFrame(() => (bar.style.transition = "")));
+};
+
+const navBar = h("div", { class: "selbar" }), tabMarker = h("div", { class: "tabbar" });
+function renderNav() {
+  const item = (page, icon, label, count) => h("button", { class: "nav-item" + (view.page === page || (page === "installed" && view.page === "detail") ? " active" : ""), onclick: () => go({ page }) },
+    ico(icon, 17), label, count != null && h("span", { class: "count" }, String(count)));
+  const list = document.getElementById("navItems");
+  list.replaceChildren(item("installed", "grid", "Installed", S.plugins.length), item("activity", "activity", "Activity"), navBar);
+  slide(navBar, list.querySelector(".active"));
+  const rl = document.getElementById("reload"); rl.replaceChildren(ico("refresh", 17), "Reload Claude");
+  rl.onclick = () => run(() => api("reloadClaude"), "Reloading Claude");
+}
+
+// page title: a plain part and an italic part
+function header(roman, italic, ...right) {
+  document.getElementById("top").replaceChildren(h("h1", {}, roman, italic && " ", italic && h("i", {}, italic)), h("div", { class: "sp" }), ...right);
+}
+const importFiles = async (files) => {
+  let last = null;
+  for (const f of files) {
+    const kind = /\.js$/i.test(f.name) ? "js" : "css";
+    if (await api("exists", kind, f.name).catch(() => false) && !confirm(`${f.name} is already installed. Replace it?`)) continue;
+    last = await run(() => f.text().then((src) => api("import", f.name, src)), `Imported ${f.name}`);
+  }
+  if (last) go({ page: "detail", kind: last.kind, file: last.file, tab: "code" });
+};
+const importBtn = () => {
+  const pick = h("input", { type: "file", accept: ".css,.js", multiple: true, style: "display:none", onchange: (e) => { importFiles([...e.target.files]); e.target.value = ""; } });
+  return h("button", { class: "btn", onclick: () => pick.click() }, ico("download", 15), "Import", pick);
+};
+const newBtns = () => [
+  importBtn(),
+  h("button", { class: "btn", onclick: () => go({ page: "detail", kind: "css", isNew: true, tab: "code" }) }, ico("brush", 15), "New style"),
+  h("button", { class: "btn primary", onclick: () => go({ page: "detail", kind: "js", isNew: true, tab: "code" }) }, ico("code", 15), "New script")];
+const glyphFor = (kind) => h("div", { class: "glyph", html: svg(kind === "js" ? "code" : "brush", 18) });
+const edgeOf = (p) => p.error ? " edge error" : p.needsReload ? " edge pending" : "";
+
+function metaFor(p) {
+  return h("div", { class: "meta-row" },
+    p.error && h("span", { class: "mark bad", title: "Last run failed", html: svg("alert", 14) }),
+    p.needsReload && h("span", { class: "mark", title: "Reload Claude to finish updating", html: svg("refresh", 14) }),
+    p.settings.length > 0 && h("span", { title: "Settings" }, ico("sliders", 13), String(p.settings.length)),
+    h("span", { class: "sp" }),
+    p.version && h("span", {}, "v" + p.version));
+}
+const toggle = (p) => h("button", { class: "switch" + (p.on ? " on" : ""), "aria-label": p.on ? "Disable" : "Enable",
+  onclick: (e) => { e.stopPropagation(); run(() => api("toggle", p.kind, p.file, !p.on)); } });
+
+function renderList() {
+  const c = document.getElementById("content");
+  if (view.page !== "installed") return;
+  if (!S.plugins.length) return c.replaceChildren(h("div", { class: "empty" + (entering ? " enter" : "") }, h("span", { class: "glyphmark", html: svg("puzzle", 30) }), h("h3", {}, "No plugins yet"), "Import a .css or .js file, or write your own."));
+  const list = S.plugins;
+  c.replaceChildren(h("div", { class: "grid" }, list.map((p, i) => h("div", { class: "card" + (p.on ? "" : " off") + edgeOf(p) + (entering ? " enter" : ""), style: `--i:${i}`, onclick: () => go({ page: "detail", kind: p.kind, file: p.file, tab: p.settings.length ? "settings" : "code" }) },
+    h("div", { class: "card-head" }, glyphFor(p.kind), h("div", { style: "flex:1;min-width:0" }, h("div", { class: "card-title" }, p.name), h("div", { class: "card-file" }, p.file)), toggle(p)),
+    h("div", { class: "card-desc" + (p.description ? "" : " none") }, p.description || "No description"), metaFor(p)))));
+}
+
+function render() {
+  renderNav();
+  const c = document.getElementById("content");
+  if (view.page === "installed") { header("Your", "plugins", ...newBtns()); renderList(); }
+  else if (view.page === "activity") {
+    header("Loader", "activity", h("button", { class: "ibtn lg", "aria-label": "Refresh", title: "Refresh", onclick: () => refresh() }, ico("refresh", 16)));
+    const pre = h("pre", { class: "log" }, S.log || "Nothing yet");
+    c.replaceChildren(h("div", { class: "panel" + (entering ? " enter" : "") }, pre)); c.scrollTop = c.scrollHeight;
+  } else renderDetail();
+  entering = false;
+  dots();
+}
+
+const fileLabel = (p, s) => s.value.slice(`${p.file}--${s.key}-`.length + 9);
+const IMAGE_MAX = 1.5 * 1048576; // Chromium drops URLs over 2 MB; a data: URL is 4/3 the file
+const bytesOf = (url) => Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0));
+const frameCount = async (data, type) => {
+  const d = new ImageDecoder({ data, type }); await d.tracks.ready; await d.completed.catch(() => {});
+  const n = d.tracks.selectedTrack.frameCount; d.close(); return n;
+};
+// a still image too big for Claude to draw is redrawn at most 512px on its long side; animations are left alone
+const shrink = async (f) => {
+  if (!/^image\/(png|jpeg|webp|bmp|avif)$/.test(f.type) || f.size <= IMAGE_MAX) return null;
+  if (await frameCount(new Uint8Array(await f.arrayBuffer()), f.type) > 1) return null;
+  const bmp = await createImageBitmap(f), k = Math.min(1, 512 / Math.max(bmp.width, bmp.height));
+  const c = h("canvas", { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close();
+  return { name: f.name.replace(/\.[^.]*$/, "") + ".png", url: c.toDataURL("image/png") };
+};
+
+// a file setting's size (for=<file key>): the slider plus a spark-sized preview that follows it
+const sizer = (p, file, size) => {
+  const stage = h("div", { class: "stage", style: `background-image:url("${file.preview}");background-size:${size.value}%` });
+  const ctl = ctlFor(p, size);
+  ctl.querySelector("input").addEventListener("input", (e) => { stage.style.backgroundSize = `${e.target.value}%`; });
+  return h("div", { class: "row sub" }, h("div", { class: "label" }, stage, size.label), ctl);
+};
+
+// frames=<file keys>: scrub through one of those animations (or this file's own, or any from disk) and keep one frame
+const ANIMATED = /^data:image\/(gif|webp|apng)[;,]/;
+const frameSources = (p, s) => [s.source, s.key, ...s.frames.split(",")].map((k) => p.settings.find((x) => x.key === k))
+  .filter((x) => ANIMATED.test(x?.preview || "")).map((x) => ({ label: x.key === s.source ? "Original" : x === s ? "Current" : x.label, name: fileLabel(p, x), url: x.preview }));
+const dataUrlOf = (bytes, type) => new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(new Blob([bytes], { type })); });
+const framePicker = (p, s) => {
+  const sources = frameSources(p, s);
+  const cv = h("canvas", { width: 88, height: 88 }), count = h("span", { class: "val" });
+  const r = h("input", { type: "range", min: 0, max: 0, step: 1, value: 0, "aria-label": "Frame" });
+  let dec = null, n = 1, cur = 0, src = null, token = 0;
+  const show = async (i) => {
+    const t = ++token, { image } = await dec.decode({ frameIndex: i });
+    if (t !== token) return image.close();
+    cv.width = image.displayWidth; cv.height = image.displayHeight;
+    cv.getContext("2d").drawImage(image, 0, 0); image.close();
+    cur = i; count.textContent = `${i + 1} / ${n}`;
+    r.style.setProperty("--p", `${n > 1 ? (i / (n - 1)) * 100 : 0}%`);
+  };
+  const load = async (x) => {
+    src = x; dec?.close();
+    dec = new ImageDecoder({ data: x.data || bytesOf(x.url), type: x.type || x.url.slice(5, x.url.indexOf(";")) });
+    await dec.tracks.ready; await dec.completed.catch(() => {});
+    n = dec.tracks.selectedTrack.frameCount; r.max = n - 1; r.value = 0;
+    await show(0);
+  };
+  r.addEventListener("input", () => show(Number(r.value)).catch(() => {}));
+  const pick = (b, x) => { [...seg.children].forEach((y) => y.classList.toggle("on", y === b)); load(x).catch(() => toast("Can't read that image", true)); };
+  const disk = h("input", { type: "file", accept: "image/gif,image/webp,image/apng,image/png", style: "display:none", onchange: async (e) => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (f) pick(open, { label: f.name, name: f.name, data: new Uint8Array(await f.arrayBuffer()), type: f.type });
+  } });
+  const open = h("button", { onclick: () => disk.click() }, "From a file…", disk);
+  const seg = h("div", { class: "seg" }, sources.map((x) => { const b = h("button", { onclick: () => pick(b, x) }, x.label); return b; }), open);
+  const use = () => src && run(async () => {
+    await api("setFile", p.kind, p.file, s.key, `${src.name.replace(/\.[^.]*$/, "").replace(/-frame-\d+$/, "")}-frame-${cur + 1}.png`, cv.toDataURL("image/png"));
+    // source=<hidden file key> keeps the animation the frame came from, so sharing can hand it on animated
+    if (s.source) await api("setFile", p.kind, p.file, s.source, src.name, src.url || await dataUrlOf(src.data, src.type));
+  }, `Using frame ${cur + 1}`);
+  const el = h("div", { class: "picker" }, cv, h("div", { class: "pick-body" },
+    h("div", { class: "pick-line" }, seg, h("span", { class: "sp" }), h("button", { class: "btn tint sm", onclick: use }, ico("check", 14), "Use this frame")),
+    h("div", { class: "pick-line" }, r, count)));
+  if (sources.length) pick(seg.firstChild, sources[0]);
+  return el;
+};
+
+// share=<file keys>: put this image, and its size, in those slots too. A frame cut from an animation (source=)
+// hands on the animation; a slot that takes stills (frames=) gets a still, keeping the animation as its source.
+const firstFrame = async (url) => {
+  const d = new ImageDecoder({ data: bytesOf(url), type: url.slice(5, url.indexOf(";")) });
+  const { image } = await d.decode({ frameIndex: 0 });
+  const c = h("canvas", { width: image.displayWidth, height: image.displayHeight });
+  c.getContext("2d").drawImage(image, 0, 0); image.close(); d.close();
+  return c.toDataURL("image/png");
+};
+const shareFile = (p, s) => run(async () => {
+  const byKey = (k) => p.settings.find((x) => x.key === k);
+  const sizeOf = (k) => p.settings.find((x) => x.for === k && x.type === "range");
+  const orig = s.source && byKey(s.source)?.preview ? byKey(s.source) : null;
+  const anim = orig || (ANIMATED.test(s.preview) ? s : null);
+  const size = sizeOf(s.key);
+  for (const k of s.share.split(",")) {
+    const t = byKey(k);
+    if (t?.type !== "file") continue;
+    if (t.frames && anim) { // a still slot: the frame (or the first one), plus the animation behind it
+      const frame = anim === s ? await firstFrame(s.preview) : s.preview;
+      await api("setFile", p.kind, p.file, k, fileLabel(p, anim).replace(/\.[^.]*$/, "") + "-frame-1.png", frame);
+      if (t.source) await api("setFile", p.kind, p.file, t.source, fileLabel(p, anim), anim.preview);
+    } else {
+      const from = anim || s;
+      await api("setFile", p.kind, p.file, k, fileLabel(p, from), from.preview);
+      if (t.source) await api("setSetting", p.kind, p.file, t.source, "");
+    }
+    const ts = sizeOf(k);
+    if (size && ts) await api("setSetting", p.kind, p.file, ts.key, size.value);
+  }
+}, `Using ${fileLabel(p, s)} for every state`);
+
+// a restore-default button that only shows while the value differs from the default
+const resetFor = (s, restore) => {
+  const b = h("button", { class: "ibtn ghost", "aria-label": "Restore default", title: "Restore default", onclick: () => restore().then(b.sync) }, ico("reset", 14));
+  b.sync = () => { b.style.visibility = String(s.value) === String(s.default) ? "hidden" : ""; };
+  b.sync();
+  return b;
+};
+
+const ctlFor = (p, s, after) => {
+  // controls save quietly and update in place (no re-render mid-drag, and folds animate); `after` re-checks the folds
+  const set = (v) => {
+    quietUntil = Date.now() + 1000;
+    return api("setSetting", p.kind, p.file, s.key, v).then(() => { s.value = v; after?.(); return true; })
+      .catch((e) => toast(String(e.message || e).replace(/^Error invoking remote method 'claudify': (Error: )?/, ""), true));
+  };
+  if (s.type === "color") {
+    const paint = (v) => { hex.value = pick.value = v; sw.style.background = v; reset.style.visibility = v === s.default ? "hidden" : ""; };
+    const save = (v) => set(v).then((ok) => ok && paint(v));
+    const hex = h("input", { class: "field hex", value: s.value, onchange: (e) => /^#[0-9a-f]{6}$/i.test(e.target.value) ? save(e.target.value.toLowerCase()) : toast("Use #rrggbb", true) });
+    let t; const pick = h("input", { type: "color", value: s.value, oninput: (e) => { hex.value = e.target.value; sw.style.background = e.target.value; clearTimeout(t); t = setTimeout(() => save(e.target.value), 120); } });
+    const sw = h("label", { class: "swatch", style: `background:${s.value}`, "aria-label": s.label }, pick);
+    const reset = h("button", { class: "ibtn ghost", "aria-label": "Restore default", title: `Restore default (${s.default})`, style: s.value === s.default ? "visibility:hidden" : "", onclick: () => save(s.default) }, ico("reset", 14));
+    return h("div", { class: "ctl" }, reset, sw, hex);
+  }
+  if (s.type === "range") {
+    const fmt = (v) => `${+Number(v).toFixed(3)}${s.unit || ""}`;
+    const min = s.min ?? 0, max = s.max ?? 100;
+    const fill = (v) => r.style.setProperty("--p", `${((v - min) / (max - min || 1)) * 100}%`);
+    const val = h("span", { class: "val" }, fmt(s.value)); let t;
+    const r = h("input", { type: "range", min, max, step: s.step ?? 1, value: s.value, "aria-label": s.label, oninput: (e) => { val.textContent = fmt(e.target.value); fill(e.target.value); clearTimeout(t); t = setTimeout(() => set(Number(e.target.value)).then(() => reset.sync()), 90); } });
+    fill(s.value);
+    const reset = resetFor(s, () => { r.value = s.default; val.textContent = fmt(s.default); fill(s.default); return set(s.default); });
+    return h("div", { class: "ctl" }, reset, r, val);
+  }
+  if (s.type === "number") return h("div", { class: "ctl" }, h("input", { class: "field", type: "number", style: "width:120px", value: s.value, min: s.min, max: s.max, step: s.step ?? "any", onchange: (e) => set(Number(e.target.value)) }), s.unit && h("span", { class: "val", style: "min-width:0" }, s.unit));
+  if (s.type === "toggle") {
+    const b = h("button", { class: "switch" + (s.value ? " on" : ""), "aria-label": s.label, onclick: () => set(!s.value).then((ok) => ok && b.classList.toggle("on", s.value)) });
+    return h("div", { class: "ctl" }, b);
+  }
+  if (s.type === "select") {
+    if (s.options.length <= 4) {
+      const seg = h("div", { class: "seg" }, s.options.map((o) => { const b = h("button", { class: o.value === s.value ? "on" : "", onclick: () => set(o.value).then((ok) => ok && [...seg.children].forEach((x) => x.classList.toggle("on", x === b))) }, o.label); return b; }));
+      return h("div", { class: "ctl" }, seg);
+    }
+    const sel = h("select", { class: "field", onchange: (e) => set(e.target.value).then(reset.sync) }, s.options.map((o) => h("option", { value: o.value, selected: o.value === s.value }, o.label)));
+    const reset = resetFor(s, () => { sel.value = s.default; return set(s.default); });
+    return h("div", { class: "ctl" }, reset, sel);
+  }
+  if (s.type === "file") {
+    const ext = s.value ? s.value.split(".").pop() : "";
+    // a file picked or removed by hand is no longer a frame of the stored animation
+    const clearSource = () => s.source && api("setSetting", p.kind, p.file, s.source, "");
+    const pick = h("input", { type: "file", accept: s.accept || "", style: "display:none", onchange: async (e) => {
+      const f = e.target.files[0]; e.target.value = "";
+      if (!f) return;
+      if (f.size > s.max * 1048576) return toast(`${f.name} is over ${s.max} MB`, true);
+      const small = p.kind === "css" && await shrink(f).catch(() => null);
+      if (small) return run(() => api("setFile", p.kind, p.file, s.key, small.name, small.url).then(clearSource), `Using ${f.name}, shrunk to fit`);
+      const r = new FileReader();
+      r.onload = () => run(() => api("setFile", p.kind, p.file, s.key, f.name, r.result).then(clearSource), `Using ${f.name}`);
+      r.readAsDataURL(f);
+    } });
+    return h("div", { class: "ctl" },
+      h("span", { class: "fname" + (s.value ? "" : " none"), title: s.value }, s.value ? fileLabel(p, s) : s.empty || "None"),
+      s.value && h("span", { class: "thumb", style: s.preview ? `background-image:url("${s.preview}")` : "" }, !s.preview && ext.slice(0, 4)),
+      h("button", { class: "btn sm", onclick: () => pick.click() }, ico("file", 14), s.value ? "Replace" : "Choose", pick),
+      s.value && h("button", { class: "ibtn", "aria-label": "Remove", title: "Remove", onclick: () => set("").then(clearSource).then(refresh) }, ico("x", 14)));
+  }
+  return h("div", { class: "ctl" }, h("input", { class: "field", value: s.value, onchange: (e) => set(e.target.value) }));
+};
+
+const TEMPLATES = {
+  css: `/*
+ * @name My style
+ * @description What this changes.
+ * @setting accent color #d97757 "Accent color"
+ * @setting radius range 12 "Corner radius" min=0 max=24 step=1 unit=px
+ * @setting compact toggle false "Compact spacing"
+ */
+:root {
+  --cds-clay: {{accent}} !important;
+  --cds-radius: {{radius}}px !important;
+}
+/* @if compact */
+/* rules that only apply while "Compact spacing" is on */
+/* @endif */
+`,
+  js: `// @name My script
+// @description What this does.
+// @match ^https://claude\\.ai/
+// @setting greeting text "Hello" "Greeting"
+// Runs in the page. \`settings\` holds this plugin's values; return a cleanup
+// function so it can be switched off or updated without a reload.
+const note = document.createElement("div");
+note.textContent = settings.greeting;
+return () => note.remove();
+`,
+};
+
+// if=, for= and a group's toggle= decide which rows are open; changing a value re-folds in place
+const settingsPanel = (p) => {
+  const byKey = (k) => p.settings.find((s) => s.key === k);
+  const on = (x) => x !== false && x !== "" && x !== 0 && x != null;
+  const holds = (v, c) => { const m = /^([\w-]+)(!?=)(.*)$/.exec(c); return m ? (String(v[m[1]]) === m[3]) === (m[2] === "=") : on(v[c]); };
+  const shown = (s, v) => (!s.if || s.if.split("&").every((c) => holds(v, c)))
+    && (!s.groupToggle || s.key === s.groupToggle || on(v[s.groupToggle]))
+    && (!s.for || (on(v[s.for]) && shown(byKey(s.for), v)));
+  const folds = [];
+  const fold = (test, ...kids) => { const f = h("div", { class: "fold" }, h("div", {}, ...kids)); folds.push([f, test]); return f; };
+  const sync = () => {
+    const v = Object.fromEntries(p.settings.map((s) => [s.key, s.value]));
+    for (const [f, test] of folds) { const open = test(v); f.classList.toggle("shut", !open); f.inert = !open; }
+  };
+  const rows = [];
+  p.settings.forEach((s, i) => {
+    if (s.group && s.group !== p.settings[i - 1]?.group) {
+      const t = s.groupToggle && byKey(s.groupToggle);
+      rows.push(h("div", { class: "group" }, h("span", {}, s.group), t?.type === "toggle" && ctlFor(p, t, sync)));
+    }
+    if (s.for || s.hidden || (s.groupToggle === s.key && s.type === "toggle")) return;
+    const ctl = ctlFor(p, s, sync);
+    let picking = false, picker = null;
+    if (s.type === "file" && s.share && s.preview) {
+      ctl.querySelector(".btn").before(h("button", { class: "ibtn", "aria-label": "Use for every state", title: "Use for every state", onclick: () => shareFile(p, s) }, ico("layers", 15)));
+    }
+    // the frame picker only once this slot holds an animation (or a frame cut from one)
+    if (s.type === "file" && s.frames && [s, byKey(s.source)].some((x) => ANIMATED.test(x?.preview || ""))) {
+      ctl.querySelector(".btn").before(h("button", { class: "ibtn", "aria-label": "Use one frame of an animation", title: "Use one frame of an animation", onclick: () => {
+        picking = !picking;
+        if (picking && !picker.firstChild.firstChild) picker.firstChild.append(framePicker(p, s));
+        sync();
+      } }, ico("film", 15)));
+    }
+    rows.push(fold((v) => shown(s, v), h("div", { class: "row" }, h("div", { class: "label" }, s.label), ctl)));
+    if (s.type !== "file") return;
+    if (s.frames) rows.push(picker = fold((v) => picking && shown(s, v)));
+    const size = p.settings.find((x) => x.for === s.key && x.type === "range");
+    if (size && s.preview) { ctl.querySelector(".thumb")?.remove(); rows.push(fold((v) => shown(size, v), sizer(p, s, size))); }
+  });
+  sync();
+  return h("div", { class: "panel" }, rows);
+};
+
+async function renderDetail() {
+  const v = view, c = document.getElementById("content"), enter = entering;
+  const p = v.isNew ? { kind: v.kind, file: "", name: v.kind === "js" ? "New script" : "New style", description: "", settings: [], on: true }
+    : S.plugins.find((x) => x.file === v.file && x.kind === v.kind);
+  if (!p) { view = { page: "installed" }; return render(); }
+  const kind = p.kind;
+  const back = h("button", { class: "ibtn lg", "aria-label": "Back", title: "Back", onclick: () => go({ page: "installed" }) }, ico("back", 17));
+  document.getElementById("top").replaceChildren(back);
+  const src = v.isNew ? (v.draft ?? TEMPLATES[kind]) : await api("read", p.kind, p.file);
+  if (view !== v) return; // navigated away while loading
+
+  const nameIn = v.isNew && h("input", { class: "field", style: "width:240px;height:34px", placeholder: kind === "js" ? "file-name.js…" : "file-name.css…", value: v.name || "" });
+  const actions = h("div", { class: "actions" },
+    !v.isNew && toggle(p),
+    !v.isNew && (() => { const b = h("button", { class: "ibtn lg", "aria-label": "Delete", title: "Delete", onclick: () => {
+      if (b.dataset.armed) return run(() => api("remove", p.kind, p.file).then(() => { dirty = false; view = { page: "installed" }; entering = true; }), `Deleted ${p.name}`);
+      b.dataset.armed = "1"; b.title = "Click again to delete"; setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.title = "Delete"; } }, 3000);
+    } }, ico("trash", 16)); return b; })());
+
+  const hero = h("div", { class: "hero" }, glyphFor(kind),
+    h("div", {}, v.isNew ? nameIn : h("h2", {}, p.name), h("div", { class: "meta" }, [p.file, p.author && "by " + p.author, p.version && "v" + p.version].filter(Boolean).join(" · "))),
+    actions);
+  const notice = (tone, icon, ...kids) => h("div", { class: "notice edge " + tone }, h("span", { class: "glyphmark", html: svg(icon, 18) }), ...kids);
+  const notices = [
+    p.error && notice("error", "alert", h("div", {}, h("b", {}, "Last run failed"), h("div", { class: "why" }, p.error))),
+    p.needsReload && notice("pending", "refresh", h("div", {}, h("b", {}, "Reload to finish"), h("div", { class: "why" }, "The old version had no cleanup function and is still active.")),
+      h("span", { class: "sp" }), h("button", { class: "btn sm", onclick: () => run(() => api("reloadClaude")) }, "Reload Claude")),
+  ];
+
+  const tabs = v.isNew ? [] : [["settings", "Settings"], ["code", kind === "js" ? "Script" : "Stylesheet"]];
+  const tabBar = tabs.length && h("div", { class: "tabs" }, tabs.map(([id, label]) => h("button", { class: "tab" + (v.tab === id ? " active" : ""), onclick: () => { if (v.tab !== id && guard()) { dirty = false; view = { ...v, tab: id }; render(); } } }, label)),
+    h("span", { class: "sp" }),
+    v.tab === "settings" && p.settings.length > 0 && h("button", { class: "ibtn", "aria-label": "Reset to defaults", title: "Reset to defaults", onclick: () => run(() => api("resetSettings", p.kind, p.file).then(() => { quietUntil = 0; }), "Reset to defaults") }, ico("reset", 15)));
+
+  let body;
+  if (v.tab === "settings" && !v.isNew) {
+    body = p.settings.length
+      ? settingsPanel(p)
+      : h("div", { class: "panel empty" }, h("span", { class: "glyphmark", html: svg("sliders", 28) }), h("h3", {}, "No settings"),
+          "Add controls with @setting lines in the header", h("br"),
+          h("pre", {}, `@setting accent color #d97757 "Accent color"\n@setting size range 16 "Text size" min=12 max=22 unit=px\n@setting layout select wide "Layout" options=narrow:Narrow|wide:Wide\n@setting glow toggle true "Glow"\n@setting title text "Hi" "Title"`));
+  } else {
+    const ta = h("textarea", { class: "code", spellcheck: false, value: src });
+    ta.addEventListener("input", () => { dirty = true; if (v.isNew) v.draft = ta.value; });
+    ta.addEventListener("keydown", (e) => { if (e.key === "Tab") { e.preventDefault(); ta.setRangeText("  ", ta.selectionStart, ta.selectionEnd, "end"); dirty = true; } });
+    const save = async () => {
+      const name = v.isNew ? nameIn.value.trim() : p.file;
+      if (!name) { nameIn.focus(); return toast("Give it a file name", true); }
+      await run(async () => { const f = await api("save", kind, name, ta.value); dirty = false; view = { page: "detail", kind, file: f, tab: "code" }; }, "Saved");
+    };
+    window.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); } };
+    body = h("div", {},
+      h("div", { class: "editor-bar" }, h("span", { class: "foot" }, kind === "js" || p.script ? "Scripts rerun the moment you save." : "Styles apply the moment you save."), h("span", { class: "sp" }),
+        h("kbd", {}, "Ctrl S"), h("button", { class: "btn primary sm", onclick: save }, ico("check", 14), "Save")),
+      ta);
+  }
+  const parts = [hero, p.description && h("div", { class: "desc" }, p.description), ...notices.filter(Boolean), tabBar, body].filter(Boolean);
+  if (enter) parts.forEach((el, i) => { el.classList.add("enter"); el.style.setProperty("--i", i); });
+  c.replaceChildren(h("div", { class: "detail" }, ...parts));
+  if (tabBar) { tabBar.append(tabMarker); slide(tabMarker, tabBar.querySelector(".tab.active"), true); }
+}
+
+window.claudify.onChange(() => {
+  paintLook();
+  if (!dirty && Date.now() > quietUntil) refresh();
+  else api("state").then((s) => { S = s; renderNav(); });
+});
+paintLook();
+refresh();
+</script></body></html>

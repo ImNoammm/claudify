@@ -1,0 +1,305 @@
+#!/usr/bin/env bash
+# claudify: plugins and themes for Claude Desktop on Linux.
+#
+#   claudify install [AppImage]    find Claude Desktop, patch it and register the MCP server
+#   claudify restore               put Claude's original app.asar back
+#   claudify uninstall             restore Claude and remove claudify (your plugins are kept)
+#   claudify status                show what is patched and which plugins are on
+#
+#   claudify plugins               open the plugins window (also Ctrl+Alt+K or the top bar button)
+#   claudify add <file> [name]     add a .css or .js plugin
+#   claudify rm <name>             delete a plugin
+#   claudify off <name>            turn a plugin off
+#   claudify on <name>             turn it back on
+#   claudify ls                    list plugins
+#   claudify edit <name>           open a plugin in $EDITOR
+#   claudify inspect <expr|file>   run JS in every Claude window and print the results
+#   claudify dir                   print the config directory
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+CFG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+CSS_DIR="${CLAUDIFY_DIR:-$CFG_HOME/claudify/css}"
+ROOT="$(dirname "$CSS_DIR")"
+JS_DIR="$ROOT/js"
+LOG="$ROOT/loader.log"
+STATE="$ROOT/install.state"
+BIN_DIR="$HOME/.local/bin"
+APPIMAGE_DIR="${CLAUDIFY_APP_DIR:-$HOME/.local/lib/claude-desktop}"
+DESKTOP="${XDG_DATA_HOME:-$HOME/.local/share}/applications/claude-desktop.desktop"
+CLAUDE_CFG="$CFG_HOME/Claude/claude_desktop_config.json"
+
+die() { echo "claudify: $*" >&2; exit 1; }
+say() { echo "claudify: $*"; }
+
+# install.state remembers which Claude we patched: MODE (appimage or system) and ASAR
+load_state() {
+  MODE="" ASAR=""
+  [[ -f $STATE ]] || return 0
+  MODE="$(sed -n 's/^MODE=//p' "$STATE")"
+  ASAR="$(sed -n 's/^ASAR=//p' "$STATE")"
+}
+save_state() { mkdir -p "$ROOT"; printf 'MODE=%s\nASAR=%s\n' "$MODE" "$ASAR" > "$STATE"; }
+
+# the folder holding resources/app.asar, which is also where the Electron binary lives
+app_root() { dirname "$(dirname "$ASAR")"; }
+running() { [[ -n $ASAR ]] && pgrep -f -- "$(app_root)/" >/dev/null; }
+
+# run a command as root only when the target is not writable by us
+as_owner() {
+  local target="$1"; shift
+  if [[ -w $target ]]; then "$@"
+  elif command -v sudo >/dev/null; then sudo "$@"
+  elif command -v doas >/dev/null; then doas "$@"
+  else die "need root to write $target (install sudo or doas)"
+  fi
+}
+
+find_system_asar() {
+  local c
+  for c in $(system_asar_candidates); do
+    [[ $c == "$APPIMAGE_DIR"/* ]] || { echo "$c"; return; }
+  done
+  return 1
+}
+
+system_asar_candidates() {
+  local c bin
+  for bin in claude-desktop claude-desktop-unofficial claude; do
+    c="$(command -v "$bin" 2>/dev/null)" || continue
+    c="$(readlink -f "$c")"
+    # a launcher script usually names the app folder; a real binary sits next to resources/
+    [[ -f $(dirname "$c")/resources/app.asar ]] && echo "$(dirname "$c")/resources/app.asar"
+    if [[ $(head -c 2 "$c" 2>/dev/null) == "#!" ]]; then
+      local p
+      for p in $(grep -oE '/[A-Za-z0-9_./-]+' "$c" | sort -u); do
+        [[ -f $p/resources/app.asar ]] && echo "$p/resources/app.asar"
+        [[ -f $(dirname "$p")/resources/app.asar ]] && echo "$(dirname "$p")/resources/app.asar"
+      done
+    fi
+  done
+  for c in /usr/lib/claude-desktop*/resources/app.asar /usr/lib64/claude-desktop*/resources/app.asar \
+           /opt/claude-desktop*/resources/app.asar /opt/Claude*/resources/app.asar /opt/claude*/resources/app.asar \
+           /usr/share/claude-desktop*/resources/app.asar /usr/local/lib/claude-desktop*/resources/app.asar; do
+    [[ -f $c ]] && echo "$c"
+  done
+}
+
+find_appimage() {
+  local d f
+  for d in "$HOME/Applications" "$HOME/.local/bin" "$HOME/Downloads" "$HOME/bin" "$HOME/.local/share/applications" /opt; do
+    [[ -d $d ]] || continue
+    f="$(find "$d" -maxdepth 2 -type f -iname '*claude*.appimage' 2>/dev/null | sort | tail -n 1)"
+    [[ -n $f ]] && { echo "$f"; return; }
+  done
+  return 1
+}
+
+readonly_install_hint() {
+  if command -v flatpak >/dev/null && flatpak list --app 2>/dev/null | grep -qi claude; then
+    die "Claude Desktop is installed as a Flatpak, which is read-only. Install the AppImage or a .deb/.rpm build instead."
+  fi
+  if ls /nix/store/*claude-desktop*/ >/dev/null 2>&1; then
+    die "Claude Desktop from Nix lives in the read-only Nix store. Install the AppImage instead and run: claudify install /path/to/Claude.AppImage"
+  fi
+}
+
+extract_appimage() {
+  local img; img="$(readlink -f "$1")"
+  [[ -f $img ]] || die "AppImage not found: $1"
+  chmod +x "$img" 2>/dev/null || true
+  say "extracting $img to $APPIMAGE_DIR"
+  mkdir -p "$(dirname "$APPIMAGE_DIR")"
+  local tmp; tmp="$(mktemp -d "$(dirname "$APPIMAGE_DIR")/.claude-desktop.XXXX")"
+  ( cd "$tmp" && "$img" --appimage-extract >/dev/null ) || { rm -rf "$tmp"; die "could not extract $img"; }
+  rm -rf "$APPIMAGE_DIR"
+  mv "$tmp/squashfs-root" "$APPIMAGE_DIR"; rmdir "$tmp"
+}
+
+# pick the Claude Desktop to patch: an AppImage given on the command line, the one we
+# patched before, a system package, an AppImage we already extracted, or one lying around
+detect() {
+  local given="${1:-}" a
+  load_state
+  if [[ -n $given ]]; then
+    extract_appimage "$given"
+  elif [[ -n $ASAR && -f $ASAR ]]; then
+    return 0
+  elif a="$(find_system_asar)"; then
+    MODE=system ASAR="$a"; return 0
+  elif [[ ! -f $APPIMAGE_DIR/AppRun ]]; then
+    local img; img="$(find_appimage)" || { readonly_install_hint; die "Claude Desktop not found. Install it, or pass its AppImage: claudify install /path/to/Claude.AppImage"; }
+    extract_appimage "$img"
+  fi
+  MODE=appimage
+  ASAR="$(find "$APPIMAGE_DIR" -path '*/resources/app.asar' -type f | head -n 1)"
+  [[ -n $ASAR ]] || die "no resources/app.asar inside $APPIMAGE_DIR"
+}
+
+write_launcher() {
+  mkdir -p "$BIN_DIR" "$(dirname "$DESKTOP")"
+  cat > "$BIN_DIR/claude-desktop" <<L
+#!/usr/bin/env bash
+# Chromium only uses a keyring on desktops it knows (not Hyprland, Sway and so on); without one Claude forgets its login
+[[ -n \${CLAUDE_PASSWORD_STORE:-} ]] || ! command -v gnome-keyring-daemon >/dev/null || export CLAUDE_PASSWORD_STORE=gnome-libsecret
+exec "$APPIMAGE_DIR/AppRun" "\$@"
+L
+  chmod +x "$BIN_DIR/claude-desktop"
+  local entry icon
+  entry="$(find "$APPIMAGE_DIR" -maxdepth 1 -name '*.desktop' | head -n 1)"
+  icon="$(app_root)/resources/icon.png"
+  [[ -f $icon ]] || icon="$(find "$APPIMAGE_DIR" -maxdepth 1 -name '*.png' | head -n 1)"
+  if [[ -n $entry ]]; then
+    sed -e "s|^Exec=[^ ]*|Exec=$BIN_DIR/claude-desktop|" -e "s|^Icon=.*|Icon=$icon|" "$entry" > "$DESKTOP"
+    command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP")" 2>/dev/null || true
+  fi
+}
+
+cmd_install() {
+  command -v python3 >/dev/null || die "python3 is required"
+  detect "${1:-}"
+  say "Claude Desktop: $(app_root) ($MODE)"
+  local tmp; tmp="$(mktemp -d)"
+  # a clean app.asar means a fresh install or a Claude update: back it up before patching
+  if [[ $(python3 "$HERE/lib/asar.py" status "$ASAR") == clean ]]; then
+    as_owner "$(dirname "$ASAR")" cp "$ASAR" "$ASAR.orig"
+  fi
+  [[ -f $ASAR.orig ]] || die "no backup at $ASAR.orig and app.asar is already patched by something else"
+  cp "$ASAR.orig" "$tmp/app.asar"
+  python3 "$HERE/lib/asar.py" patch "$tmp/app.asar" "$HERE/lib/loader.js" "$HERE/lib/plugins.html" >/dev/null
+  as_owner "$ASAR" cp "$tmp/app.asar" "$ASAR"
+  rm -rf "$tmp"
+  save_state
+  mkdir -p "$CSS_DIR" "$JS_DIR"
+  [[ $MODE == appimage ]] && write_launcher
+  mcp_config add
+  say "installed. Open plugins with Ctrl+Alt+K or the puzzle button in Claude's top bar."
+  [[ $MODE == system ]] && say "after Claude Desktop updates, run 'claudify install' again"
+  if running; then say "restart Claude Desktop to load claudify"; fi
+}
+
+cmd_restore() {
+  load_state
+  [[ -n $ASAR && -f $ASAR.orig ]] || die "nothing to restore"
+  as_owner "$ASAR" cp "$ASAR.orig" "$ASAR"
+  say "restored Claude's original app.asar"
+}
+
+cmd_uninstall() {
+  load_state
+  if [[ $MODE == appimage ]]; then
+    rm -rf "$APPIMAGE_DIR" "$BIN_DIR/claude-desktop" "$DESKTOP"
+    say "removed the extracted AppImage and its launcher (your AppImage file is untouched)"
+  elif [[ -n $ASAR && -f $ASAR.orig ]]; then
+    cmd_restore
+    as_owner "$ASAR.orig" rm -f "$ASAR.orig"
+  fi
+  mcp_config remove
+  rm -f "$STATE"
+  if [[ $(readlink -f "$BIN_DIR/claudify" 2>/dev/null) == "$HERE/claudify" ]]; then rm -f "$BIN_DIR/claudify"; fi
+  [[ $HERE == "${XDG_DATA_HOME:-$HOME/.local/share}/claudify" ]] && rm -rf "$HERE"
+  say "uninstalled. Your plugins and settings are still in $ROOT"
+}
+
+# add or remove the Claudify MCP server in Claude Desktop's config, leaving everything else alone
+mcp_config() {
+  [[ -f $CLAUDE_CFG || $1 == add ]] || return 0
+  python3 - "$1" "$CLAUDE_CFG" "$HERE/mcp/claudify_mcp.py" <<'PY'
+import json, os, sys, tempfile
+op, cfg, server = sys.argv[1:]
+data = {}
+if os.path.exists(cfg):
+    with open(cfg) as f:
+        data = json.load(f)
+servers = data.setdefault("mcpServers", {})
+want = {"command": "python3", "args": [server]}
+if op == "add":
+    if servers.get("Claudify") == want:
+        sys.exit()
+    servers["Claudify"] = want
+elif servers.pop("Claudify", None) is None:
+    sys.exit()
+os.makedirs(os.path.dirname(cfg), exist_ok=True)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cfg))
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+os.replace(tmp, cfg)
+print(f"claudify: MCP server {'added to' if op == 'add' else 'removed from'} {cfg}")
+PY
+}
+
+cmd_status() {
+  load_state
+  if [[ -n $ASAR && -f $ASAR ]]; then
+    echo "app:    $(app_root) ($MODE, $(python3 "$HERE/lib/asar.py" status "$ASAR"))"
+  else
+    echo "app:    not installed"
+  fi
+  echo "config: $ROOT"
+  cmd_ls
+}
+
+cmd_ls() {
+  mkdir -p "$CSS_DIR" "$JS_DIR"
+  local f n st any=0
+  for f in "$CSS_DIR"/*.css "$CSS_DIR"/*.css.off "$JS_DIR"/*.js "$JS_DIR"/*.js.off; do
+    [[ -e $f ]] || continue
+    n="${f##*/}" st=on any=1
+    [[ $n == *.off ]] && { st=off; n="${n%.off}"; }
+    printf '  %-4s %s\n' "$st" "$n"
+  done
+  ((any)) || echo "  (no plugins)"
+}
+
+# plugin name to its path. The extension picks the kind; a bare name prefers an existing script.
+resolve() {
+  local n="${1##*/}"; n="${n%.off}"
+  if [[ $n != *.css && $n != *.js ]]; then
+    if [[ -e $JS_DIR/$n.js || -e $JS_DIR/$n.js.off ]]; then n="$n.js"; else n="$n.css"; fi
+  fi
+  [[ $n =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || die "bad name: $n"
+  if [[ $n == *.js ]]; then echo "$JS_DIR/$n"; else echo "$CSS_DIR/$n"; fi
+}
+
+cmd_add() {
+  [[ -f ${1:-} ]] || die "usage: claudify add <file.css|file.js> [name]"
+  local name="${2:-$1}" p
+  [[ ${1##*/} == *.js && ${name##*/} != *.js ]] && name="$name.js"
+  p="$(resolve "$name")"; mkdir -p "${p%/*}"
+  cp "$1" "$p"
+  say "added ${p##*/}"
+}
+cmd_rm()  { local p; p="$(resolve "${1:?name}")"; rm -f "$p" "$p.off"; say "removed ${p##*/}"; }
+cmd_off() { local p; p="$(resolve "${1:?name}")"; [[ -f $p ]] || die "not on: ${p##*/}"; mv "$p" "$p.off"; say "off ${p##*/}"; }
+cmd_on()  { local p; p="$(resolve "${1:?name}")"; [[ -f $p.off ]] || die "not off: ${p##*/}"; mv "$p.off" "$p"; say "on ${p##*/}"; }
+cmd_edit() { local p; p="$(resolve "${1:?name}")"; mkdir -p "${p%/*}"; [[ -f $p.off ]] && p="$p.off"; "${EDITOR:-nano}" "$p"; }
+cmd_dir() { echo "$ROOT"; }
+
+cmd_plugins() {
+  load_state
+  running || die "Claude Desktop is not running"
+  touch "$ROOT/open-plugins"
+}
+
+cmd_inspect() {
+  [[ -n ${1:-} ]] || die "usage: claudify inspect '<js expression>' | <file.js>"
+  load_state
+  running || die "Claude Desktop is not running"
+  local src="$1" before i out
+  [[ -f $1 ]] && src="$(cat "$1")"
+  before=$(wc -l < "$LOG" 2>/dev/null || echo 0)
+  printf '%s\n' "$src" > "$ROOT/inspect.js"
+  for i in $(seq 1 30); do
+    sleep 0.2
+    out=$(tail -n +"$((before + 1))" "$LOG" 2>/dev/null | grep ' inspect wc#' || true)
+    [[ -n $out ]] && { sleep 0.5; break; }
+  done
+  out=$(tail -n +"$((before + 1))" "$LOG" 2>/dev/null | grep ' inspect wc#' | cut -d' ' -f2- || true)
+  [[ -n $out ]] && echo "$out" || die "no result within 6s (see $LOG)"
+}
+
+case "${1:-}" in
+  install|restore|uninstall|status|ls|add|rm|off|on|edit|dir|plugins|inspect) c="$1"; shift; "cmd_$c" "$@" ;;
+  *) sed -n '2,/^set -e/{/^set -e/d;s/^# \{0,1\}//p}' "$0"; exit 1 ;;
+esac
