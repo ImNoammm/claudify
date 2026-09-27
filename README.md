@@ -5,7 +5,7 @@
 Themes and plugins for Claude Desktop on Linux. Recolor the app, change its fonts, swap Claude's
 spark for Nyan Cat, or ask Claude to restyle itself.
 
-<p align="center"><img src="assets/screenshot.png" width="760" alt="The claudify plugins window"></p>
+<p align="center"><img src="assets/home.png" width="560" alt="Claude with the Claudify Theme and Nyan Cat"></p>
 
 ## Install
 
@@ -37,13 +37,25 @@ Claude updates. Flatpak and Nix installs are read-only and can't be patched; use
 Press Ctrl+Alt+K, or click the puzzle button in Claude's top bar, to open the plugins window.
 The Claudify Theme comes with it. Its settings cover colors, fonts, text size, corner radius,
 the spark animation and the new-chat greeting.
+Every plugin page has an Export button that saves the plugin with your current settings built
+in, so you can share it or bring it back later with Import.
+
+<p align="center"><img src="assets/screenshot.png" width="760" alt="The claudify plugins window"></p>
 
 You can also just ask Claude. The installer adds a Claudify connector, so in any chat you can say:
 
 - "Use the Claudify connector to make the background dark blue"
 - "Use the Claudify connector and set the chat font to mono"
-- "Use the Claudify connector to write a plugin that hides the sidebar"
-- "Use the Claudify connector to turn the greeting off"
+
+The theme only covers colors, fonts, the spark and the greeting. For anything else, describe the
+change and Claude writes a plugin for it:
+
+- "Use the Claudify connector to remove the sidebar icons"
+- "Use the Claudify connector to hide the Cowork button next to Chat"
+- "Use the Claudify connector to make the chat column wider"
+- "Use the Claudify connector to hide the mic button in the message box"
+- "Use the Claudify connector to put a starry background behind the chat"
+- "Use the Claudify connector to add a soft rainbow glow around the message box"
 
 Changes apply right away without a restart. If Claude doesn't see the connector, check that
 Claudify is switched on in the chat's connectors menu.

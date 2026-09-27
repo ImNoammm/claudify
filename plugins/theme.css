@@ -1,7 +1,8 @@
 /*
  * @name Claudify Theme
+ * @description Claude theming engine
  * @author claudify
- * @version 2.2.0
+ * @version 2.3.0
  * @group "Colors"
  * @setting colors select default "Colors" options="default:Default|oled:OLED|custom:Custom"
  * @setting background color #151515 "Background" if=colors=custom
